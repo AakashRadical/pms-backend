@@ -15,7 +15,7 @@ app.use('/api/employee', employeeRoutes);
 
 app.use('/api/tasks', taskRoutes);  
 app.get('/',(req,res)=>{
-  res.send("PMS BACKEND IS RUNNING")
+  res.send("PMS BACKEND IS RUNNING On SERVER")
 })
 
 app.listen(5000, () => {
