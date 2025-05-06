@@ -1,14 +1,14 @@
 import db from '../db/db.js';
 
-export const getEmployeesByAdmin = async (req, res) => {
-  const { adminId } = req.params;
-  try {
-    const [rows] = await db.query('SELECT id, first_name, last_name,gender FROM employees WHERE admin_id = ?', [adminId]);
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ message: 'Error fetching employees', error: err });
-  }
-};
+// export const getEmployeesByAdmin = async (req, res) => {
+//   const { adminId } = req.params;
+//   try {
+//     const [rows] = await db.query('SELECT id, first_name, last_name,gender FROM employees WHERE admin_id = ?', [adminId]);
+//     res.json(rows);
+//   } catch (err) {
+//     res.status(500).json({ message: 'Error fetching employees', error: err });
+//   }
+// };
 
 export const createTask = async (req, res) => {
     const {
