@@ -57,19 +57,32 @@ export const updateTask = async (req, res) => {
   } = req.body;
 
   try {
+    const updates = {};
+    if (title !== undefined) updates.title = title;
+    if (description !== undefined) updates.description = description;
+    if (start_date !== undefined) updates.start_date = start_date;
+    if (due_date !== undefined) updates.due_date = due_date;
+    if (priority !== undefined) updates.priority = priority;
+    if (status !== undefined) updates.status = status;
+    if (status === 'Completed' && completion_date !== undefined) {
+      updates.completion_date = completion_date;
+    } else if (status !== 'Completed') {
+      updates.completion_date = null;
+    }
+    if (position !== undefined) updates.position = position;
+
+    const fields = Object.keys(updates);
+    if (fields.length === 0) {
+      return res.status(400).json({ message: 'No fields to update' });
+    }
+
+    const setClause = fields.map((field) => `${field} = ?`).join(', ');
+    const values = fields.map((field) => updates[field]);
+
     await db.query(`
-      UPDATE tasks SET 
-        title = ?, description = ?, start_date = ?, 
-        due_date = ?, priority = ?, status = ?, 
-        completion_date = ?, position = ?
+      UPDATE tasks SET ${setClause}
       WHERE id = ?
-    `, [
-      title, description, start_date,
-      due_date, priority, status,
-      status === 'Completed' ? completion_date : null,
-      position !== undefined ? position : 0,
-      taskId
-    ]);
+    `, [...values, taskId]);
 
     res.status(200).json({ message: "Task updated" });
   } catch (err) {
