@@ -90,3 +90,28 @@ export const updateTask = async (req, res) => {
     res.status(500).json({ message: "Update failed" });
   }
 };
+
+export const deleteTask = async (req, res) => {
+  const { taskId } = req.params;
+
+  try {
+
+
+    // Delete task assignments
+    const [assignmentResult] = await db.query('DELETE FROM task_assignments WHERE task_id = ?', [taskId]);
+   
+
+    // Delete the task
+    const [taskResult] = await db.query('DELETE FROM tasks WHERE id = ?', [taskId]);
+
+
+    if (taskResult.affectedRows === 0) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    res.status(200).json({ message: 'Task deleted' });
+  } catch (err) {
+   
+    res.status(500).json({ message: 'Delete failed', error: err });
+  }
+};
