@@ -1,4 +1,6 @@
 import db from '../db/db.js';
+import jwt from 'jsonwebtoken';
+
 
 export const createTask = async (req, res) => {
   const {
@@ -113,5 +115,69 @@ export const deleteTask = async (req, res) => {
   } catch (err) {
    
     res.status(500).json({ message: 'Delete failed', error: err });
+  }
+};
+
+
+export const getEmployeeTasks = async (req, res) => {
+  const { employeeId } = req.params;
+  const token = req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    // Verify JWT token
+    jwt.verify(token, process.env.JWT_SECRET);
+
+    const [rows] = await db.query(
+      `
+      SELECT 
+        t.id AS task_id, t.title, t.description, 
+        t.start_date, t.due_date, t.priority, 
+        t.status, t.completion_date, t.position,
+        e.first_name, e.last_name, e.designation, e.gender
+      FROM tasks t
+      INNER JOIN task_assignments ta ON ta.task_id = t.id
+      INNER JOIN employees e ON ta.employee_id = e.id
+      WHERE ta.employee_id = ? AND t.status != ?
+      ORDER BY t.position ASC
+      `,
+      [employeeId, 'Completed']
+    );
+
+    if (rows.length === 0) {
+      // Fetch employee details even if no tasks exist
+      const [employee] = await db.query(
+        'SELECT first_name, last_name, designation, gender FROM employees WHERE id = ?',
+        [employeeId]
+      );
+      return res.status(200).json({ tasks: [], employee: employee[0] || {} });
+    }
+
+    // Group response to include tasks and employee details
+    res.status(200).json({
+      tasks: rows.map(row => ({
+        task_id: row.task_id,
+        title: row.title,
+        description: row.description,
+        start_date: row.start_date,
+        due_date: row.due_date,
+        priority: row.priority,
+        status: row.status,
+        completion_date: row.completion_date,
+        position: row.position,
+      })),
+      employee: {
+        first_name: rows[0].first_name,
+        last_name: rows[0].last_name,
+        designation: rows[0].designation,
+        gender: rows[0].gender,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching employee tasks:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 };
