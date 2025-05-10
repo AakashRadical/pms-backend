@@ -131,21 +131,21 @@ export const getEmployeeTasks = async (req, res) => {
     // Verify JWT token
     jwt.verify(token, process.env.JWT_SECRET);
 
-    const [rows] = await db.query(
-      `
-      SELECT 
-        t.id AS task_id, t.title, t.description, 
-        t.start_date, t.due_date, t.priority, 
-        t.status, t.completion_date, t.position,
-        e.first_name, e.last_name, e.designation, e.gender
-      FROM tasks t
-      INNER JOIN task_assignments ta ON ta.task_id = t.id
-      INNER JOIN employees e ON ta.employee_id = e.id
-      WHERE ta.employee_id = ? AND t.status != ?
-      ORDER BY t.position ASC
-      `,
-      [employeeId, 'Completed']
-    );
+   const [rows] = await db.query(
+  `
+  SELECT 
+    t.id AS task_id, t.title, t.description, 
+    t.start_date, t.due_date, t.priority, 
+    t.status, t.completion_date, t.position,
+    e.first_name, e.last_name, e.designation, e.gender
+  FROM tasks t
+  INNER JOIN task_assignments ta ON ta.task_id = t.id
+  INNER JOIN employees e ON ta.employee_id = e.id
+  WHERE ta.employee_id = ?
+  ORDER BY t.position ASC
+  `,
+  [employeeId]
+);
 
     if (rows.length === 0) {
       // Fetch employee details even if no tasks exist
