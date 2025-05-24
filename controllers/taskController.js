@@ -1,12 +1,12 @@
 import db from '../db/db.js';
 import jwt from 'jsonwebtoken';
 
-
 export const createTask = async (req, res) => {
   const {
     title, description, start_date, due_date,
     priority, status, admin_id, assignedEmployees, position
   } = req.body;
+  const io = req.app.get('io');
 
   try {
     const [result] = await db.query(
@@ -20,6 +20,38 @@ export const createTask = async (req, res) => {
     );
 
     await Promise.all(assignmentInserts);
+
+    // Fetch employee details for the task
+    const [employeeRows] = await db.query(
+      'SELECT id, first_name, last_name, gender FROM employees WHERE id IN (?) AND admin_id = ?',
+      [assignedEmployees, admin_id]
+    );
+
+    const taskData = {
+      task_id: taskId,
+      title,
+      description,
+      start_date,
+      due_date,
+      priority,
+      status,
+      admin_id,
+      position: position || 0,
+      employee_ids: assignedEmployees,
+      employees: employeeRows.map(emp => ({
+        id: emp.id,
+        first_name: emp.first_name,
+        last_name: emp.last_name,
+        gender: emp.gender
+      }))
+    };
+
+    // Emit to assigned employees and admin
+    assignedEmployees.forEach(empId => {
+      io.to(empId.toString()).emit('newTask', taskData);
+    });
+    io.to(admin_id.toString()).emit('newTask', taskData);
+
     res.status(201).json({ message: 'Task created and employees assigned' });
   } catch (err) {
     console.error(err);
@@ -57,6 +89,7 @@ export const updateTask = async (req, res) => {
     title, description, start_date, due_date,
     priority, status, completion_date, position
   } = req.body;
+  const io = req.app.get('io');
 
   try {
     const updates = {};
@@ -81,10 +114,35 @@ export const updateTask = async (req, res) => {
     const setClause = fields.map((field) => `${field} = ?`).join(', ');
     const values = fields.map((field) => updates[field]);
 
-    await db.query(`
+    const [result] = await db.query(`
       UPDATE tasks SET ${setClause}
       WHERE id = ?
     `, [...values, taskId]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    const [assigned] = await db.query(
+      'SELECT employee_id FROM task_assignments WHERE task_id = ?',
+      [taskId]
+    );
+    const assignedEmployeeIds = assigned.map(row => row.employee_id);
+
+    const [taskRow] = await db.query('SELECT admin_id FROM tasks WHERE id = ?', [taskId]);
+    const adminId = taskRow[0].admin_id;
+
+    const taskData = {
+      task_id: parseInt(taskId),
+      ...updates,
+      employee_ids: assignedEmployeeIds
+    };
+
+    // Emit to assigned employees and admin
+    assignedEmployeeIds.forEach(empId => {
+      io.to(empId.toString()).emit('updateTask', taskData);
+    });
+    io.to(adminId.toString()).emit('updateTask', taskData);
 
     res.status(200).json({ message: "Task updated" });
   } catch (err) {
@@ -95,29 +153,40 @@ export const updateTask = async (req, res) => {
 
 export const deleteTask = async (req, res) => {
   const { taskId } = req.params;
+  const io = req.app.get('io');
 
   try {
+    const [assigned] = await db.query(
+      'SELECT employee_id FROM task_assignments WHERE task_id = ?',
+      [taskId]
+    );
+    const assignedEmployeeIds = assigned.map(row => row.employee_id);
 
+    const [taskRow] = await db.query('SELECT admin_id FROM tasks WHERE id = ?', [taskId]);
+    const adminId = taskRow[0]?.admin_id;
 
-    // Delete task assignments
-    const [assignmentResult] = await db.query('DELETE FROM task_assignments WHERE task_id = ?', [taskId]);
-   
+    await db.query('DELETE FROM task_assignments WHERE task_id = ?', [taskId]);
 
-    // Delete the task
     const [taskResult] = await db.query('DELETE FROM tasks WHERE id = ?', [taskId]);
-
 
     if (taskResult.affectedRows === 0) {
       return res.status(404).json({ message: 'Task not found' });
     }
 
+    // Emit to assigned employees and admin
+    assignedEmployeeIds.forEach(empId => {
+      io.to(empId.toString()).emit('deleteTask', { task_id: parseInt(taskId) });
+    });
+    if (adminId) {
+      io.to(adminId.toString()).emit('deleteTask', { task_id: parseInt(taskId) });
+    }
+
     res.status(200).json({ message: 'Task deleted' });
   } catch (err) {
-   
+    console.error("Delete error:", err);
     res.status(500).json({ message: 'Delete failed', error: err });
   }
 };
-
 
 export const getEmployeeTasks = async (req, res) => {
   const { employeeId } = req.params;
@@ -128,27 +197,25 @@ export const getEmployeeTasks = async (req, res) => {
   }
 
   try {
-    // Verify JWT token
     jwt.verify(token, process.env.JWT_SECRET);
 
-   const [rows] = await db.query(
-  `
-  SELECT 
-    t.id AS task_id, t.title, t.description, 
-    t.start_date, t.due_date, t.priority, 
-    t.status, t.completion_date, t.position,
-    e.first_name, e.last_name, e.designation, e.gender
-  FROM tasks t
-  INNER JOIN task_assignments ta ON ta.task_id = t.id
-  INNER JOIN employees e ON ta.employee_id = e.id
-  WHERE ta.employee_id = ?
-  ORDER BY t.position ASC
-  `,
-  [employeeId]
-);
+    const [rows] = await db.query(
+      `
+      SELECT 
+        t.id AS task_id, t.title, t.description, 
+        t.start_date, t.due_date, t.priority, 
+        t.status, t.completion_date, t.position,
+        e.first_name, e.last_name, e.designation, e.gender
+      FROM tasks t
+      INNER JOIN task_assignments ta ON ta.task_id = t.id
+      INNER JOIN employees e ON ta.employee_id = e.id
+      WHERE ta.employee_id = ?
+      ORDER BY t.position ASC
+      `,
+      [employeeId]
+    );
 
     if (rows.length === 0) {
-      // Fetch employee details even if no tasks exist
       const [employee] = await db.query(
         'SELECT first_name, last_name, designation, gender FROM employees WHERE id = ?',
         [employeeId]
@@ -156,7 +223,6 @@ export const getEmployeeTasks = async (req, res) => {
       return res.status(200).json({ tasks: [], employee: employee[0] || {} });
     }
 
-    // Group response to include tasks and employee details
     res.status(200).json({
       tasks: rows.map(row => ({
         task_id: row.task_id,
