@@ -52,7 +52,7 @@ export const loginEmployee = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const [rows] = await db.query('SELECT id, password FROM employees WHERE email = ?', [email]);
+    const [rows] = await db.query('SELECT id, password, admin_id FROM employees WHERE email = ?', [email]);
     const user = rows[0];
 
     if (!user) {
@@ -64,8 +64,8 @@ export const loginEmployee = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token, id: user.id });
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+    res.json({ token, id: user.id, adminId: user.admin_id });
   } catch (error) {
     console.error('Error logging in employee:', error);
     res.status(500).json({ message: 'Login failed' });
