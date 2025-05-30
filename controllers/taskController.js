@@ -1,6 +1,5 @@
 import db from '../db/db.js';
 import jwt from 'jsonwebtoken';
-
 export const createTask = async (req, res) => {
   const {
     title, description, start_date, due_date,
@@ -48,14 +47,16 @@ export const createTask = async (req, res) => {
 
     // Emit to assigned employees and admin
     assignedEmployees.forEach(empId => {
+      console.log(`Emitting newTask to employee ${empId}`);
       io.to(empId.toString()).emit('newTask', taskData);
     });
+    console.log(`Emitting newTask to admin ${admin_id}`);
     io.to(admin_id.toString()).emit('newTask', taskData);
 
-    res.status(201).json({ message: 'Task created and employees assigned' });
+    res.status(201).json({ message: 'Task created and employees assigned', task_id: taskId });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error creating task', error: err });
+    console.error('Error creating task:', err);
+    res.status(500).json({ message: 'Error creating task', error: err.message });
   }
 };
 
