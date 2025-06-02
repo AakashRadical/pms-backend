@@ -145,7 +145,8 @@ export const updateTask = async (req, res) => {
     });
     io.to(adminId.toString()).emit('updateTask', taskData);
 
-    res.status(200).json({ message: "Task updated" });
+    // Return the taskData in the HTTP response
+    res.status(200).json(taskData);
   } catch (err) {
     console.error("Update error:", err);
     res.status(500).json({ message: "Update failed" });
